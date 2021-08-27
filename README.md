@@ -10,15 +10,15 @@ Full working example: [`lounge.yaml`](lounge.yaml)
 ## How BLE tracking works
 To track a person or object, you attach a [BLE](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy) tag like [TrackR](https://www.thetrackr.com/). Every few seconds the tracker broadcasts its presence to all listening receivers. It is identified by its unique MAC address. A BLE receiver, like the Raspberry Pi running [room assistant](https://www.room-assistant.io/), or ESP32 with [ESPHome BLE RSSI sensor](https://esphome.io/components/sensor/ble_rssi.html) detects the broadcast and records the received signal strength ([RSSI](https://en.wikipedia.org/wiki/Received_signal_strength_indication)). If the signal is weak then the tag is far away, and if the signal is strong then the tag is near. You can use this to infer whether the tag is in the room or not, and base home automation on the tags presence or absence.
 
-For my home automation I didn't just want to know that a room was occupied (by using [PIR sensors](https://en.wikipedia.org/wiki/Passive_infrared_sensor)), I wanted to know _who_ was in the room so that automations could be customised. But I didn't want to wear a BLE tag. But I do always wear my Apple Watch, and I know _that_ ha s Bluetooth.
+For my home automation I didn't just want to know that a room was occupied (by using [PIR sensors](https://en.wikipedia.org/wiki/Passive_infrared_sensor)), I wanted to know _who_ was in the room so that automations could be customised. I didn't want to wear a BLE tag. But I do always wear my Apple Watch, and I know _that_ has Bluetooth.
 
 
 ## Apple Watch BLE tracking
-Apple devices use BLE broadcasts to notify other Apple devices of their proximity, for use in handoff, Find My and Airdrop. This is called the [Apple Continuity Protocol](https://github.com/furiousMAC/continuity) and has been somewhat reverse engineered.
+Apple devices use BLE broadcasts to notify other Apple devices of their proximity, for use in handoff, Find My and Airdrop. This is the [Apple Continuity Protocol](https://github.com/furiousMAC/continuity) and has been somewhat reverse engineered.
 
 However, for privacy reasons – to prevent tracking, the exact thing I want to do – Apple randomly generates a new MAC address about every 45 minutes. Without a stable MAC address, how can you tell which broadcast is your watch?
 
-One of the Apple Watch broadcasts is the [Nearby Info](https://github.com/furiousMAC/continuity/blob/master/messages/nearby_info.md) message. It is transmitted every few seconds, and it has enough information to reliably find amongst all other BLE broadcast messages.
+One of the Apple Watch broadcasts is the [Nearby Info](https://github.com/furiousMAC/continuity/blob/master/messages/nearby_info.md) message. It is transmitted every few seconds, and it has enough information to reliably find an Apple Watch amongst all other BLE broadcast messages.
 
 ### Apple Watch Nearby Info message
 An example of the Nearby Info message (in hex) split for easier reading: `4c00 10 05 01 98 86b356`, where
@@ -30,7 +30,7 @@ An example of the Nearby Info message (in hex) split for easier reading: `4c00 1
 - `98` the Data flags. If the watch is unlocked it is `98`, and if locked (e.g. on night stand, not on wrist) then it is `18`
 - `86b356` is 3 byte Authentication tag. There is no useful info here as it changes continuously
 
-I can reliably detect my Apple Watch by searching all broadcast messages for Apple manufacturer ID `4c00` with data fields that starts with `10 05 01 98`.
+I can reliably detect my Apple Watch by searching all broadcast messages for Apple manufacturer ID `4c00` with data field that starts with `10 05 01 98`.
 
 ### How do you know if this is _your_ Apple Watch?
 Although I have not yet done this, you can confirm that it is your Apple watch by connecting to the device, listing all services, and then going through each service looking for the characteristic ID `Model Number String` that has a value such as `Watch3,3`. 
@@ -128,7 +128,7 @@ script:
     - script.execute: presence_timeout
 ```
 
-The script is called each time an RSSI value is published. A 30 second delay timer is started. If the script is called again before the 30s delay is over, because of `mode: restart` the script is restarted, and the delay time is reset to 30s and `0` is never published. If no RSSI value has been received for 30 s then publish a state of not present (`0`), and call the script again. Not present will continue to be published every 30s for as long as the Apple Watch is not detected.
+The script is called each time an RSSI value is published. A 30 second delay timer is started. If the script is called again before the 30s delay is over, because of `mode: restart` the script is restarted, and the delay time is reset to 30s and `0` is never published. If no RSSI value has been received for 30s then publish a state of not present (`0`), and call the script again. Not present will continue to be published every 30s for as long as the Apple Watch is not detected.
 
 Next is the debounce sensor:
 
@@ -169,7 +169,7 @@ The RSSI signal strength and room presence status are published to the Home Assi
 Add the ESP32 tracker to Home Assistant using the [ESPHome integration](https://www.home-assistant.io/integrations/esphome/). You should see a new device with two entities: one for RSSI and the other for room presence.
 
 ### Automations
-Using room presence to automate turning on lights when you enter a room after dark. In `automations.yaml` add something like:
+Using room presence to automate turning on lights when you enter a room after dark. In your Home Assistant's `automations.yaml` add something like:
 
 ```
 - id: enter_lounge_when_dark
@@ -192,7 +192,7 @@ Using room presence to automate turning on lights when you enter a room after da
 
 ![Dale Home](images/person.png)
 
-I wanted Home Assistant to use my Apple Watch to determine whether I was `home` or `not_home`. This is done by using the presence binary sensors as a [device tracker](https://www.home-assistant.io/integrations/device_tracker/). 
+I wanted Home Assistant to use my Apple Watch to determine whether I was `home` or `not_home`. This is done by using the presence binary sensors as a [device tracker](https://www.home-assistant.io/integrations/device_tracker/). You have to do this with an automation. 
 
 In `automations.yaml` I added the following:
 
@@ -221,7 +221,7 @@ In `automations.yaml` I added the following:
         source_type: "bluetooth_le"
 ```
 
-When any of the BLE trackers detects my watch (note `or`) then I am `home`; when none of the trackers can detect my watch (note `and`) then I am `not_home`; and at start-up when the sensors haven't been initialised then the state is `unknown`. The `device_tracker.see` service adds my apple watch to `known_devices.yaml`, and makes the device tracker available as an entity.
+The automation is called when any of the BLE trackers changes state. When any tracker detects my watch (note `or`) then I am `home`; when none of the trackers can detect my watch (note `and`) then I am `not_home`; and at start-up when the sensors haven't been initialised then the state is `unknown`. The `device_tracker.see` service adds my apple watch to `known_devices.yaml`, and makes the device tracker available as an entity.
 
 From there, you can add the device tracker to yourself in People, and HA will use that (as well as your other device trackers) to determine if you are home or not.
 
@@ -237,9 +237,11 @@ As you can see from the image below, even though I am in the lounge almost the e
 
 ![Lounge presence history](images/history.png)
 
-You will have to adjust the rssi detection limits and filters and the position of your ESP32 in the room for best reliability. In short, don't expect miracles.
+You will have to adjust the RSSI detection limits and filters and the position of your ESP32 in the room for best reliability. In short, don't expect miracles.
 
-I find that a hybrid approach is best: Use PIR to trigger automations like switching on the lights when entering a room, and use BLE presence detection to know that you are still in the room, even when not moving (like working from a desk.)
+I find that a hybrid approach is best: 
+- Use PIR to trigger automations like switching on the lights when entering a room
+- Use BLE presence detection to know that you are still in the room, even when not moving (like working from a desk.)
 
 
 ## Tested with
