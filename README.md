@@ -10,11 +10,11 @@ Full working example: [`lounge.yaml`](lounge.yaml)
 ## How BLE tracking works
 To track a person or object, you attach a [BLE](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy) tag like [TrackR](https://www.thetrackr.com/). Every few seconds the tracker broadcasts its presence to all listening receivers. It is identified by its unique MAC address. A BLE receiver, like the Raspberry Pi running [room assistant](https://www.room-assistant.io/), or ESP32 with [ESPHome BLE RSSI sensor](https://esphome.io/components/sensor/ble_rssi.html) detects the broadcast and records the received signal strength ([RSSI](https://en.wikipedia.org/wiki/Received_signal_strength_indication)). If the signal is weak then the tag is far away, and if the signal is strong then the tag is near. You can use this to infer whether the tag is in the room or not, and base home automation on the tags presence or absence.
 
-For my home automation I didn't just want to know that a room was occupied (by using [PIR sensors](https://en.wikipedia.org/wiki/Passive_infrared_sensor)), I wanted to know _who_ was in the room so that automations could be customised. I didn't want to wear a BLE tag. But I do always wear my Apple Watch, and I know _that_ has Bluetooth.
+I didn't want to wear a BLE tag for home automation. But I do always wear my Apple Watch, and I know that has Bluetooth.
 
 
 ## Apple Watch BLE tracking
-Apple devices use BLE broadcasts to notify other Apple devices of their proximity, for use in handoff, Find My and Airdrop. This is the [Apple Continuity Protocol](https://github.com/furiousMAC/continuity) and has been somewhat reverse engineered.
+Apple devices use BLE broadcasts to notify other Apple devices of their proximity, for use in Handoff, Find My and Airdrop. This is the Apple Continuity Protocol and has been somewhat [reverse engineered](https://github.com/furiousMAC/continuity).
 
 However, for privacy reasons – to prevent tracking, the exact thing I want to do – Apple randomly generates a new MAC address about every 45 minutes. Without a stable MAC address, how can you tell which broadcast is your watch?
 
@@ -48,7 +48,7 @@ Each ESP32 continually scans for the Nearby Info BLE message, and when it finds 
 ### Config file explanation
 I have templatised the [`lounge.yaml`](lounge.yaml) as much as possible. 
 
-```
+```yaml
 substitutions:
   roomname: bedroom
   static_ip: 10.0.0.16
@@ -63,7 +63,7 @@ substitutions:
 
 The detection works as follows:
 
-```
+```yaml
 esp32_ble_tracker:
   scan_parameters:
     interval: 1.2s
@@ -88,7 +88,7 @@ On all broadcasts, a lambda is run which looks for the manufacturer UUID `004c` 
 
 The lambda publishes the RSSI to the `apple_watch_rssi` template sensor:
 
-```
+```yaml
   - platform: template
     id: apple_watch_rssi
     name: "$yourname Apple Watch $roomname RSSI"
@@ -116,7 +116,7 @@ Next apply hysteresis, so that only if the signal is stronger than `rssi_present
 
 We also start a `presence_timeout` script, so that if no signal is detected (maybe you leave the house), then  publish a `0` value to indicate not present. 
 
-```
+```yaml
 script:
   # Publish event every 30 seconds when no rssi received
   id: presence_timeout
@@ -132,7 +132,7 @@ The script is called each time an RSSI value is published. A 30 second delay tim
 
 Next is the debounce sensor:
 
-```
+```yaml
   - platform: template
     id: room_presence_debounce
     filters:
@@ -143,7 +143,7 @@ Next is the debounce sensor:
 
 in conjunction with the room presence binary sensor:
 
-```
+```yaml
 binary_sensor:
   - platform: template
     id: room_presence
@@ -171,7 +171,7 @@ Add the ESP32 tracker to Home Assistant using the [ESPHome integration](https://
 ### Automations
 Using room presence to automate turning on lights when you enter a room after dark. In your Home Assistant's `automations.yaml` add something like:
 
-```
+```yaml
 - id: enter_lounge_when_dark
   alias: "Turn on lounge lights on entry after sunset"
   trigger:
@@ -196,7 +196,7 @@ I wanted Home Assistant to use my Apple Watch to determine whether I was `home` 
 
 In `automations.yaml` I added the following:
 
-```
+```yaml
 - id: dale_apple_watch_device_tracker
   alias: Dale Apple Watch Tracker
   trigger:
