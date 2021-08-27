@@ -41,7 +41,9 @@ You can then store the MAC address until it cycles in ~45 minutes. When the MAC 
 
 
 ## Tracking Apple Watch with ESPHome
-In each room where I want BLE tracking I have an [ESP32 D1 mini](https://www.alibaba.com/products/d1_mini_esp32.html?IndexArea=product_en&tab=rts) running ESPHome. I have included [`lounge.yaml`](lounge.yaml) as an example of my ESPHome configuration. 
+In each room where I want BLE tracking I have an [ESP32 D1 mini](https://www.alibaba.com/products/d1_mini_esp32.html?IndexArea=product_en&tab=rts) running ESPHome.
+
+![ESP32](images/esp32.jpg)
 
 Each ESP32 continually scans for the Nearby Info BLE message, and when it finds it, gets the signal strength (RSSI). The strength fluctuates depending where you are in the room and how much of your body is shielding the watch from the receiver. A number of filters reduce the noise, and then make the decision whether you are in the room or not. The RSSI and presence is sent to Home Assistant via the native API, and also published to MQTT for use by e.g. Node-RED.
 
