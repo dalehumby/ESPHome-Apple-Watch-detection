@@ -6,10 +6,12 @@ Full working example: [`lounge.yaml`](lounge.yaml)
 
 ![Presence detection](images/presence.png)
 
+
 ## How BLE tracking works
 To track a person or object, you attach a [BLE](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy) tag like [TrackR](https://www.thetrackr.com/). Every few seconds the tracker broadcasts its presence to all listening receivers. It is identified by its unique MAC address. A BLE receiver, like the Raspberry Pi running [room assistant](https://www.room-assistant.io/), or ESP32 with [ESPHome BLE RSSI sensor](https://esphome.io/components/sensor/ble_rssi.html) detects the broadcast and records the received signal strength ([RSSI](https://en.wikipedia.org/wiki/Received_signal_strength_indication)). If the signal is weak then the tag is far away, and if the signal is strong then the tag is near. You can use this to infer whether the tag is in the room or not, and base home automation on the tags presence or absence.
 
 For my home automation I didn't just want to know that a room was occupied (by using [PIR sensors](https://en.wikipedia.org/wiki/Passive_infrared_sensor)), I wanted to know _who_ was in the room so that automations could be customised. But I didn't want to wear a BLE tag. But I do always wear my Apple Watch, and I know _that_ ha s Bluetooth.
+
 
 ## Apple Watch BLE tracking
 Apple devices use BLE broadcasts to notify other Apple devices of their proximity, for use in handoff, Find My and Airdrop. This is called the [Apple Continuity Protocol](https://github.com/furiousMAC/continuity) and has been somewhat reverse engineered.
@@ -36,6 +38,7 @@ Although I have not yet done this, you can confirm that it is your Apple watch b
 As long as you're the only person with a series 3 Apple Watch with hardware revision 3 in your house, you will reliably be able to track yourself.
 
 You can then store the MAC address until it cycles in ~45 minutes. When the MAC does change you rescan for the Nearby Info message `4c00 10 05 98` and service characteristic `Model Number String` `Watch3,3`.
+
 
 ## Tracking Apple Watch with ESPHome
 In each room where I want BLE tracking I have an [ESP32 D1 mini](https://www.alibaba.com/products/d1_mini_esp32.html?IndexArea=product_en&tab=rts) running ESPHome. I have included [`lounge.yaml`](lounge.yaml) as an example of my ESPHome configuration. 
@@ -160,18 +163,77 @@ The debounce sensor requires 3 consecutive readings to be the same to change pre
 
 The RSSI signal strength and room presence status are published to the Home Assistant native API as well as MQTT each time they change.
 
+
 ## Integration to Home Assistant
 
+Add the ESP32 tracker to Home Assistant using the [ESPHome integration](https://www.home-assistant.io/integrations/esphome/). You should see a new device with two entities: one for RSSI and the other for room presence.
+
 ### Automations
+Using room presence to automate turning on lights when you enter a room after dark. In `automations.yaml` add something like:
+
+```
+- id: enter_lounge_when_dark
+  alias: "Turn on lounge lights on entry after sunset"
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.dale_lounge_presence
+      to: "on"
+  condition:
+    - condition: numeric_state
+      entity_id: sun.sun
+      attribute: elevation
+      below: 0
+  action:
+    - service: light.turn_on
+      entity_id: light.lounge_light
+```
 
 ### Device Tracker
 
-### Reliability
+![Dale Home](images/person.png)
+
+I wanted Home Assistant to use my Apple Watch to determine whether I was `home` or `not_home`. This is done by using the presence binary sensors as a [device tracker](https://www.home-assistant.io/integrations/device_tracker/). 
+
+In `automations.yaml` I added the following:
+
+```
+- id: dale_apple_watch_device_tracker
+  alias: Dale Apple Watch Tracker
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.dale_bedroom_presence
+    - platform: state
+      entity_id: binary_sensor.dale_lounge_presence
+  action:
+    - service: device_tracker.see
+      data:
+        dev_id: dale_apple_watch
+        location_name: >
+          {% if is_state("binary_sensor.dale_bedroom_presence", "on") 
+             or is_state("binary_sensor.dale_lounge_presence", "on") %}
+            home
+          {% elif is_state("binary_sensor.dale_bedroom_presence", "off") 
+             and is_state("binary_sensor.dale_lounge_presence", "off") %}
+            not_home
+          {% else %}
+            unknown
+          {% endif %}
+        source_type: "bluetooth_le"
+```
+
+When any of the BLE trackers detects my watch (note `or`) then I am `home`; when none of the trackers can detect my watch (note `and`) then I am `not_home`; and at start-up when the sensors haven't been initialised then the state is `unknown`. The `device_tracker.see` service adds my apple watch to `known_devices.yaml`, and makes the device tracker available as an entity.
+
+From there, you can add the device tracker to yourself in People, and HA will use that (as well as your other device trackers) to determine if you are home or not.
+
+![Device Tracker](images/device_tracker.png)
+
+
+## Reliability
 The BLE tracker itself works very well. However, RSSI fluctuates wildly depending on where in the room you are, how your arm/watch is positioned, and the position of the ESP32 receiver. There is a trade-off between reliability and speed: Filters could reduce the false detections, but would be slow to change (and therefore automations would be slow to act), or automations can be fast, but trigger when they shouldn't.
 
 My goal is to have an automation trigger within 3-5 seconds of entering a room, and never when I am not in the room. 
 
-As you can see from the image below, even though I am in the lounge almost the entire day (my home office desk is there), the signal is very noise.
+As you can see from the image below, even though I am in the lounge almost the entire day (my home office desk is there), presence detection is noisy.
 
 ![Lounge presence history](images/history.png)
 
@@ -184,6 +246,8 @@ I find that a hybrid approach is best: Use PIR to trigger automations like switc
 - ESPHome 2021.8
 - Generic MINI32 board (ESP32 with integrated 5V to 3V and USB to serial converter)
 - Apple Watch Series 3 (`Watch3,3`)
+- My house is made from brick with a concrete slab between the bedroom and lounge, so signal attenuates rapidly
+
 
 ## Prior work on fingerprinting Apple device
 - [Apple device continuity](https://github.com/furiousMAC/continuity)
@@ -192,9 +256,11 @@ I find that a hybrid approach is best: Use PIR to trigger automations like switc
 - https://samteplov.com/uploads/shmoocon20/slides.pdf
 - https://i.blackhat.com/eu-19/Thursday/eu-19-Yen-Trust-In-Apples-Secret-Garden-Exploring-Reversing-Apples-Continuity-Protocol-3.pdf
 
+
 ## Similar presence detection projects
 - [room-assistant](https://www.room-assistant.io/guide/) using Raspberry Pi Zero
-- [ESP32-mqtt-room](https://github.com/jptrsn/ESP32-mqtt-room)
+- [ESP32-mqtt-room](https://github.com/jptrsn/ESP32-mqtt-room) using ESP32, but not ESPHome
+
 
 ## Contributing
 I've only tested this on my Series 3 Apple Watch, and not sure whether this works with other Apple Watches. Probably the easiest way to see BLE broadcasts is by running `$ sudo blescan -t 70` on your computer, rather than compiling ESPHome each time.
