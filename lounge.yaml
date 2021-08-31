@@ -47,15 +47,17 @@ esp32_ble_tracker:
       # Where YY can be 01, 0B, 0D; and XXXXXX is ignored
       - lambda: |-
           for (auto data : x.get_manufacturer_datas()) {
-            if (data.uuid.to_string() == "0x004C" && data.data[0] == 0x10 && data.data[1] == 0x05 
-            && data.data[3] == 0x98
-            && (data.data[2] == 0x01 || data.data[2] == 0x0B || data.data[2] == 0x0D)) {
+            if (data.uuid.to_string() == "0x004C" && data.data[0] == 0x10 && data.data[1] == 0x05 && data.data[3] == 0x98) {
+              int16_t ac = data.data[2];
               int16_t rssi = x.get_rssi();
-              id(apple_watch_rssi).publish_state(rssi);
-              ESP_LOGD("ble_adv", "Found Apple Watch (mac %s) rssi %i", x.address_str().c_str(), rssi);
+              if (ac == 0x01 || ac == 0x0B || ac == 0x0D) {
+                id(apple_watch_rssi).publish_state(rssi);
+                ESP_LOGD("ble_adv", "Found Apple Watch (mac %s) rssi %i", x.address_str().c_str(), rssi);
+              } else {
+                ESP_LOGD("ble_adv", "Possible Apple Watch? (mac %s) rssi %i, unrecognised action code %#04x", x.address_str().c_str(), rssi, ac);
+              }
             }
           }
-
 sensor:
   - platform: template
     id: apple_watch_rssi
