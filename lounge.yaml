@@ -44,13 +44,13 @@ esp32_ble_tracker:
   on_ble_advertise:
     - then:
       # Look for manufacturer data of form: 4c00 10 05 YY 98 XXXXXX
-      # Where YY can be 01, 0B, 0D; and XXXXXX is ignored
+      # Where YY can be 01..0F; and XXXXXX is ignored
       - lambda: |-
           for (auto data : x.get_manufacturer_datas()) {
             if (data.uuid.to_string() == "0x004C" && data.data[0] == 0x10 && data.data[1] == 0x05 && data.data[3] == 0x98) {
-              int16_t ac = data.data[2];
+              uint8_t ac = data.data[2];
               int16_t rssi = x.get_rssi();
-              if (ac == 0x01 || ac == 0x0B || ac == 0x0D) {
+              if (ac <= 0x0F) {
                 id(apple_watch_rssi).publish_state(rssi);
                 ESP_LOGD("ble_adv", "Found Apple Watch (mac %s) rssi %i", x.address_str().c_str(), rssi);
               } else {
@@ -58,6 +58,7 @@ esp32_ble_tracker:
               }
             }
           }
+
 sensor:
   - platform: template
     id: apple_watch_rssi

@@ -26,18 +26,18 @@ An example of the Nearby Info message (in hex) split for easier reading: `4c00 1
 - `4c00` is Apple's manufacturer identifier. All Apple BLE broadcasts start with this 16-bit number
 - `10` identifies the Nearby Info message
 - `05` is the length: 5 bytes to follow
-- `01` is the status flags and action code. Always `01`
+- `01` is the status flags and action code. Appears to be in the range 01 .. 0F
 - `98` the Data flags. If the watch is unlocked it is `98`, and if locked (e.g. on night stand, not on wrist) then it is `18`
 - `86b356` is 3 byte Authentication tag. There is no useful info here as it changes continuously
 
-I can reliably detect my Apple Watch by searching all broadcast messages for Apple manufacturer ID `4c00` with data field that starts with `10 05 01 98`.
+I can reliably detect an Apple Watch by searching all broadcast messages for Apple manufacturer ID `4c00` with data field that starts with `10 05 0X 98`, where X is 0 through F.
 
 ### How do you know if this is _your_ Apple Watch?
 Although I have not yet done this, you can confirm that it is your Apple watch by connecting to the device, listing all services, and then going through each service looking for the characteristic ID `Model Number String` that has a value such as `Watch3,3`. 
 
 As long as you're the only person with a series 3 Apple Watch with hardware revision 3 in your house, you will reliably be able to track yourself.
 
-You can then store the MAC address until it cycles in ~45 minutes. When the MAC does change you rescan for the Nearby Info message `4c00 10 05 98` and service characteristic `Model Number String` `Watch3,3`.
+You can then store the MAC address until it cycles in ~45 minutes. When the MAC does change you rescan for the Nearby Info message `4c00 10 05 01 98` and service characteristic `Model Number String` `Watch3,3`.
 
 
 ## Tracking Apple Watch with ESPHome
@@ -73,20 +73,26 @@ esp32_ble_tracker:
     active: false
   on_ble_advertise:
     - then:
-      # Look for manufacturer data of form: 4c00 10 05 01 98 XXXXXX
+      # Look for manufacturer data of form: 4c00 10 05 YY 98 XXXXXX
+      # Where YY can be 01..0F; and XXXXXX is ignored
       - lambda: |-
           for (auto data : x.get_manufacturer_datas()) {
-            if (data.uuid.to_string() == "0x004C" && data.data[0] == 0x10 && data.data[1] == 0x05 && data.data[2] == 0x01 && data.data[3] == 0x98) {
+            if (data.uuid.to_string() == "0x004C" && data.data[0] == 0x10 && data.data[1] == 0x05 && data.data[3] == 0x98) {
+              uint8_t ac = data.data[2];
               int16_t rssi = x.get_rssi();
-              id(apple_watch_rssi).publish_state(rssi);
-              ESP_LOGD("ble_adv", "Found Apple Watch, rssi %i", rssi);
+              if (ac <= 0x0F) {
+                id(apple_watch_rssi).publish_state(rssi);
+                ESP_LOGD("ble_adv", "Found Apple Watch (mac %s) rssi %i", x.address_str().c_str(), rssi);
+              } else {
+                ESP_LOGD("ble_adv", "Possible Apple Watch? (mac %s) rssi %i, unrecognised action code %#04x", x.address_str().c_str(), rssi, ac);
+              }
             }
           }
 ```
 
 This uses ESPHome's [`esp32_ble_tracker`](https://esphome.io/components/esp32_ble_tracker.html) sensor. I've increased the `interval` and `window` to give as much time to detect the watch broadcast, but also enough time for the ESP32 to switch to WiFi to send results to MQTT and HA. We only listen for broadcasts, so `active: false`.
 
-On all broadcasts, a lambda is run which looks for the manufacturer UUID `004c` (note: big-endian), and manufacturer data that starts with `10 05 01 98`. I am specifically looking for when the watch is **unlocked** (i.e. on my wrist) so that tracking stops when I take my watch off and it auto-locks. Locked state changes byte 3 to `18`. (All values hex.)
+On all broadcasts, a lambda is run which looks for the manufacturer UUID `004c` (note: big-endian), and manufacturer data that starts with `10 05 0X 98`. Byte 2 appears to always be in the range 01 through 0F. I am specifically looking for when the watch is **unlocked** (i.e. on my wrist) so that tracking stops when I take my watch off and it auto-locks. Locked state changes byte 3 to `18`. (All values hex.)
 
 The lambda publishes the RSSI to the `apple_watch_rssi` template sensor:
 
@@ -246,10 +252,11 @@ I find that a hybrid approach is best:
 - Use BLE presence detection to know that you are still in the room, even when not moving (like working from a desk.)
 
 
-## Tested with
+## Tested and works with
 - ESPHome 2021.8
 - Generic MINI32 board (ESP32 with integrated 5V to 3V and USB to serial converter)
 - Apple Watch Series 3 (`Watch3,3`)
+- Apple Watch Series 5 (`Watch5,2`)
 - My house is made from brick with a concrete slab between the bedroom and lounge, so signal attenuates rapidly
 
 
