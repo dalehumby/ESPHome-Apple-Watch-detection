@@ -2,8 +2,8 @@ substitutions:
   roomname: lounge
   static_ip: 10.0.0.14
   yourname: Dale
-  rssi_present: "-73"
-  rssi_not_present: "-85"
+  rssi_present: id(harssi_present).state
+  rssi_not_present: id(harssi_not_present).state
 
 esphome:
   name: $roomname
@@ -86,7 +86,14 @@ sensor:
       - sliding_window_moving_average:
           window_size: 3
           send_every: 1
-
+  - platform: homeassistant
+    name: HA RSSI Present Value
+    entity_id: input_number.XXXXXXXXXXXXXXXXX #insert your input.number entity id here
+    id: harssi_present
+  - platform: homeassistant
+    name: HA RSSI Not Present Value
+    entity_id: input_number.XXXXXXXXXXXXXXXXX #insert your input.number entity id here
+    id: harssi_not_present
 binary_sensor:
   - platform: template
     id: room_presence
