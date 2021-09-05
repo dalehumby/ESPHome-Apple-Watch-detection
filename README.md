@@ -55,13 +55,26 @@ substitutions:
   roomname: bedroom
   static_ip: 10.0.0.16
   yourname: Dale
-  rssi_present: "-73"
-  rssi_not_present: "-85"
+  rssi_present: id(harssi_present).state
+  rssi_not_present: id(harssi_not_present).state
 ```
 
 `roomname`, `static_ip` and `yourname` should be self explanatory. 
 
-`rssi_present` is the signal strength that determines whether you are definitely in the room. Anything stronger than `-73` and you are present. For `rssi_not_present`, an RSSI of below `-85` means that you are definitely not present in the room. (RSSI values are always negative. The closer to 0 a number is, the stronger the signal is: -50 is much stronger than -100.)
+`rssi_present` and 'rssi_not_present' are the upper and lower limits of signal strength that determine if you are present in a room or not.  Anything stronger than the value in 'rssi_present' and you are considered present. Anything below the value of 'rssi_not_present' means that you are definitly not present in the room. (RSSI values are always negative. The closer to 0 a number is, the stronger the signal is: -50 is much stronger than -100.) These values are pulled from two input.number helpers that will need to be created in Home Assistant. https://my.home-assistant.io/redirect/helpers/ The values are pulled into your ESPhome configuration using the two sensors configurations below. The "XXXXXXX" will need to be replaced with the entity_id of the input.number helpers you have already created. The input.number helpers should be created with a minimum value of -100, a maximum value of 0, and a unit of measurement of dBm. 
+
+```
+sensor:
+  - platform: homeassistant
+    name: HA RSSI Present Value
+    entity_id: input_number.XXXXXXXX
+    id: harssi_present
+  - platform: homeassistant
+    name: HA RSSI Not Present Value
+    entity_id: input_number.XXXXXXXX
+    id: harssi_not_present
+```    
+
 
 The detection works as follows:
 
