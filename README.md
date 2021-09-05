@@ -61,7 +61,9 @@ substitutions:
 
 `roomname`, `static_ip` and `yourname` should be self explanatory. 
 
-`rssi_present` and 'rssi_not_present' are the upper and lower limits of signal strength that determine if you are present in a room or not.  Anything stronger than the value in 'rssi_present' and you are considered present. Anything below the value of 'rssi_not_present' means that you are definitly not present in the room. (RSSI values are always negative. The closer to 0 a number is, the stronger the signal is: -50 is much stronger than -100.) These values are pulled from two input.number helpers that will need to be created in Home Assistant. https://my.home-assistant.io/redirect/helpers/ The values are pulled into your ESPhome configuration using the two sensors configurations below. The "XXXXXXX" will need to be replaced with the entity_id of the input.number helpers you have already created. The input.number helpers should be created with a minimum value of -100, a maximum value of 0, and a unit of measurement of dBm. 
+`rssi_present` and `rssi_not_present` are the upper and lower limits of signal strength that determine if you are present in a room or not.  Anything stronger than the value in 'rssi_present' and you are considered present. Anything below the value of 'rssi_not_present' means that you are definitly not present in the room. (RSSI values are always negative. The closer to 0 a number is, the stronger the signal is: -50 is much stronger than -100.) 
+
+These values are pulled from two input.number helpers that will need to be created in Home Assistant. (See https://my.home-assistant.io/redirect/helpers/) The values are pulled into your ESPhome configuration using the two sensors configurations below. The "XXXXXXX" will need to be replaced with the entity_id of the input.number helpers you have already created. The input.number helpers should be created with a minimum value of -100, a maximum value of 0, and a unit of measurement of dBm. 
 
 ```
 sensor:
@@ -287,7 +289,7 @@ I find that a hybrid approach is best:
 
 
 ## Contributing
-I've only tested this on my Series 3 Apple Watch, and not sure whether this works with other Apple Watches. Probably the easiest way to see BLE broadcasts is by running `$ sudo blescan -t 70` on your computer, rather than compiling ESPHome each time.
+This has been tested on Series 3 and Series 5 Apple Watches. If this doesn't work on your Apple watch please open an Issue.
 
 I'd prefer that this was a custom ESPHome sensor, similar to [Xiaomi Mijia BLE Sensors](https://esphome.io/components/sensor/xiaomi_ble.html), instead of 100 lines of yaml. If you can help with the C, please let me know.
 
