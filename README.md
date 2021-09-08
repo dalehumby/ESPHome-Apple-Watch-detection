@@ -91,23 +91,34 @@ esp32_ble_tracker:
       # Look for manufacturer data of form: 4c00 10 05 YY 98 XXXXXX
       # Where YY can be 01..0F; and XXXXXX is ignored
       - lambda: |-
+          optional<int16_t> best_rssi = nullopt;
           for (auto data : x.get_manufacturer_datas()) {
-            if (data.uuid.to_string() == "0x004C" && data.data[0] == 0x10 && data.data[1] == 0x05 && data.data[3] == 0x98) {
-              uint8_t ac = data.data[2];
-              int16_t rssi = x.get_rssi();
+            // Guard against non-Apple datagrams, or those that are too small.
+            if (data.data.size() < 4 || data.uuid.to_string() != "0x004C" || data.data[0] != 0x10 || data.data[1] < 5) {
+              continue;
+            }
+            const int16_t rssi = x.get_rssi();
+            const uint8_t ac = data.data[2];
+            const uint8_t sf = data.data[3];
+            if (sf == 0x98) {  // Match Apple Watches
               if (ac <= 0x0F) {
-                id(apple_watch_rssi).publish_state(rssi);
+                best_rssi = max(rssi, best_rssi.value_or(rssi));
                 ESP_LOGD("ble_adv", "Found Apple Watch (mac %s) rssi %i", x.address_str().c_str(), rssi);
               } else {
                 ESP_LOGD("ble_adv", "Possible Apple Watch? (mac %s) rssi %i, unrecognised action code %#04x", x.address_str().c_str(), rssi, ac);
               }
             }
           }
+          if (best_rssi) {
+            id(apple_watch_rssi).publish_state(*best_rssi);
+          }
 ```
 
 This uses ESPHome's [`esp32_ble_tracker`](https://esphome.io/components/esp32_ble_tracker.html) sensor. I've increased the `interval` and `window` to give as much time to detect the watch broadcast, but also enough time for the ESP32 to switch to WiFi to send results to MQTT and HA. We only listen for broadcasts, so `active: false`.
 
 On all broadcasts, a lambda is run which looks for the manufacturer UUID `004c` (note: big-endian), and manufacturer data that starts with `10 05 0X 98`. Byte 2 appears to always be in the range 01 through 0F. I am specifically looking for when the watch is **unlocked** (i.e. on my wrist) so that tracking stops when I take my watch off and it auto-locks. Locked state changes byte 3 to `18`. (All values hex.)
+
+For the case where multiple Apple Watches are detected, the strongest RSSI is published. As long as one watch is in the room, then the room is occupied.
 
 The lambda publishes the RSSI to the `apple_watch_rssi` template sensor:
 

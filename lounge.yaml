@@ -46,17 +46,26 @@ esp32_ble_tracker:
       # Look for manufacturer data of form: 4c00 10 05 YY 98 XXXXXX
       # Where YY can be 01..0F; and XXXXXX is ignored
       - lambda: |-
+          optional<int16_t> best_rssi = nullopt;
           for (auto data : x.get_manufacturer_datas()) {
-            if (data.uuid.to_string() == "0x004C" && data.data[0] == 0x10 && data.data[1] == 0x05 && data.data[3] == 0x98) {
-              uint8_t ac = data.data[2];
-              int16_t rssi = x.get_rssi();
+            // Guard against non-Apple datagrams, or those that are too small.
+            if (data.data.size() < 4 || data.uuid.to_string() != "0x004C" || data.data[0] != 0x10 || data.data[1] < 5) {
+              continue;
+            }
+            const int16_t rssi = x.get_rssi();
+            const uint8_t ac = data.data[2];
+            const uint8_t sf = data.data[3];
+            if (sf == 0x98) {  // Match Apple Watches
               if (ac <= 0x0F) {
-                id(apple_watch_rssi).publish_state(rssi);
+                best_rssi = max(rssi, best_rssi.value_or(rssi));
                 ESP_LOGD("ble_adv", "Found Apple Watch (mac %s) rssi %i", x.address_str().c_str(), rssi);
               } else {
                 ESP_LOGD("ble_adv", "Possible Apple Watch? (mac %s) rssi %i, unrecognised action code %#04x", x.address_str().c_str(), rssi, ac);
               }
             }
+          }
+          if (best_rssi) {
+            id(apple_watch_rssi).publish_state(*best_rssi);
           }
 
 sensor:
