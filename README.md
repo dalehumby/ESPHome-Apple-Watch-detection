@@ -89,7 +89,7 @@ esp32_ble_tracker:
   on_ble_advertise:
     - then:
       # Look for manufacturer data of form: 4c00 10 05 YY 98 XXXXXX
-      # Where YY can be 01..0F; and XXXXXX is ignored
+      # Where YY can be 01..0F or 20..2F; and XXXXXX is ignored
       - lambda: |-
           optional<int16_t> best_rssi = nullopt;
           for (auto data : x.get_manufacturer_datas()) {
@@ -98,14 +98,14 @@ esp32_ble_tracker:
               continue;
             }
             const int16_t rssi = x.get_rssi();
-            const uint8_t ac = data.data[2];
-            const uint8_t sf = data.data[3];
-            if (sf == 0x98) {  // Match Apple Watches
-              if (ac <= 0x0F) {
+            const uint8_t status_flags = data.data[2] >> 4;  // High nibble
+            const uint8_t data_flags = data.data[3];
+            if (data_flags == 0x98) {  // Match unlocked Apple Watches
+              if (status_flags == 0 || status_flags == 2) {
                 best_rssi = max(rssi, best_rssi.value_or(rssi));
                 ESP_LOGD("ble_adv", "Found Apple Watch (mac %s) rssi %i", x.address_str().c_str(), rssi);
               } else {
-                ESP_LOGD("ble_adv", "Possible Apple Watch? (mac %s) rssi %i, unrecognised action code %#04x", x.address_str().c_str(), rssi, ac);
+                ESP_LOGD("ble_adv", "Possible Apple Watch? (mac %s) rssi %i, unrecognised status/action flags %#04x", x.address_str().c_str(), rssi, data.data[2]);
               }
             }
           }
@@ -116,7 +116,7 @@ esp32_ble_tracker:
 
 This uses ESPHome's [`esp32_ble_tracker`](https://esphome.io/components/esp32_ble_tracker.html) sensor. I've increased the `interval` and `window` to give as much time to detect the watch broadcast, but also enough time for the ESP32 to switch to WiFi to send results to MQTT and HA. We only listen for broadcasts, so `active: false`.
 
-On all broadcasts, a lambda is run which looks for the manufacturer UUID `004c` (note: big-endian), and manufacturer data that starts with `10 05 0X 98`. Byte 2 appears to always be in the range 01 through 0F. I am specifically looking for when the watch is **unlocked** (i.e. on my wrist) so that tracking stops when I take my watch off and it auto-locks. Locked state changes byte 3 to `18`. (All values hex.)
+On all broadcasts, a lambda is run which looks for the manufacturer UUID `004c` (note: big-endian), and manufacturer data that starts with `10 05 0X 98`. Byte 2 appears to always be in the range `01` through `0F` for Series 2 and 5, and `21` through `2F` for Series 6. I am specifically looking for when the watch is **unlocked** (i.e. on my wrist) so that tracking stops when I take my watch off and it auto-locks. In unlocked state, byte 3 is `98`. Locked state changes byte 3 to `18`. (All values hex.)
 
 For the case where multiple Apple Watches are detected, the strongest RSSI is published. As long as one watch is in the room, then the room is occupied.
 
@@ -283,6 +283,7 @@ I find that a hybrid approach is best:
 - Generic MINI32 board (ESP32 with integrated 5V to 3V and USB to serial converter)
 - Apple Watch Series 3 (`Watch3,3`)
 - Apple Watch Series 5 (`Watch5,2`)
+- Apple Watch Series 6
 - My house is made from brick with a concrete slab between the bedroom and lounge, so signal attenuates rapidly
 
 
@@ -300,7 +301,7 @@ I find that a hybrid approach is best:
 
 
 ## Contributing
-This has been tested on Series 3 and Series 5 Apple Watches. If this doesn't work on your Apple watch please open an Issue.
+This has been tested on Series 3, 5, 6 Apple Watches. If this doesn't work on your Apple watch please open an Issue.
 
 I'd prefer that this was a custom ESPHome sensor, similar to [Xiaomi Mijia BLE Sensors](https://esphome.io/components/sensor/xiaomi_ble.html), instead of 100 lines of yaml. If you can help with the C, please let me know.
 

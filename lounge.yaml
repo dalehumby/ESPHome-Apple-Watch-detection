@@ -44,7 +44,7 @@ esp32_ble_tracker:
   on_ble_advertise:
     - then:
       # Look for manufacturer data of form: 4c00 10 05 YY 98 XXXXXX
-      # Where YY can be 01..0F; and XXXXXX is ignored
+      # Where YY can be 01..0F or 20..2F; and XXXXXX is ignored
       - lambda: |-
           optional<int16_t> best_rssi = nullopt;
           for (auto data : x.get_manufacturer_datas()) {
@@ -53,14 +53,14 @@ esp32_ble_tracker:
               continue;
             }
             const int16_t rssi = x.get_rssi();
-            const uint8_t ac = data.data[2];
-            const uint8_t sf = data.data[3];
-            if (sf == 0x98) {  // Match Apple Watches
-              if (ac <= 0x0F) {
+            const uint8_t status_flags = data.data[2] >> 4;  // High nibble
+            const uint8_t data_flags = data.data[3];
+            if (data_flags == 0x98) {  // Match unlocked Apple Watches
+              if (status_flags == 0 || status_flags == 2) {
                 best_rssi = max(rssi, best_rssi.value_or(rssi));
                 ESP_LOGD("ble_adv", "Found Apple Watch (mac %s) rssi %i", x.address_str().c_str(), rssi);
               } else {
-                ESP_LOGD("ble_adv", "Possible Apple Watch? (mac %s) rssi %i, unrecognised action code %#04x", x.address_str().c_str(), rssi, ac);
+                ESP_LOGD("ble_adv", "Possible Apple Watch? (mac %s) rssi %i, unrecognised status/action flags %#04x", x.address_str().c_str(), rssi, data.data[2]);
               }
             }
           }
