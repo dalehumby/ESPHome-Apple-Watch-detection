@@ -55,7 +55,8 @@ esp32_ble_tracker:
             const int16_t rssi = x.get_rssi();
             const uint8_t status_flags = data.data[2] >> 4;  // High nibble
             const uint8_t data_flags = data.data[3];
-            if (data_flags == 0x98) {  // Match unlocked Apple Watches
+            
+            if (data_flags == 0x98) {  // Match unlocked Apple Watch. To also match locked watch use: if (data_flags == 0x98 || data_flags == 0x18) {
               if (status_flags == 0 || status_flags == 2) {
                 best_rssi = max(rssi, best_rssi.value_or(rssi));
                 ESP_LOGD("ble_adv", "Found Apple Watch (mac %s) rssi %i", x.address_str().c_str(), rssi);
