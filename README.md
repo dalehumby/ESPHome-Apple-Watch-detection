@@ -61,24 +61,45 @@ substitutions:
 
 `roomname`, `static_ip` and `yourname` should be self explanatory. 
 
-`rssi_present` and `rssi_not_present` are the upper and lower limits of signal strength that determine if you are present in a room or not.  Anything stronger than the value in 'rssi_present' and you are considered present. Anything below the value of 'rssi_not_present' means that you are definitly not present in the room. (RSSI values are always negative. The closer to 0 a number is, the stronger the signal is: -50 is much stronger than -100.) 
+`rssi_present` and `rssi_not_present` are the upper and lower limits of signal strength that determine if you are present in a room or not.  Anything stronger than the value in `rssi_present` and you are considered present. Anything below the value of `rssi_not_present` means that you are definitely not present in the room. (RSSI values are always negative. The closer to 0 a number is, the stronger the signal is: -50 is much stronger than -100.) 
 
-These values are pulled from two input.number helpers that will need to be created in Home Assistant. (See https://my.home-assistant.io/redirect/helpers/) The values are pulled into your ESPhome configuration using the two sensors configurations below. The "XXXXXXX" will need to be replaced with the entity_id of the input.number helpers you have already created. The input.number helpers should be created with a minimum value of -100, a maximum value of 0, and a unit of measurement of dBm. 
+These values will need to be set for your particular room, so that your Watch is detected reliably within the room, and not detected when not in the room. To make tweaking these values easier you can add two `input_number` entities into Home Assistant's `configuration.yaml` file:
 
-```
-sensor:
-  - platform: homeassistant
-    name: HA RSSI Present Value
-    entity_id: input_number.XXXXXXXX
-    id: harssi_present
-  - platform: homeassistant
-    name: HA RSSI Not Present Value
-    entity_id: input_number.XXXXXXXX
-    id: harssi_not_present
+```yaml
+input_number:
+  rssi_present:
+    name: RSSI present threshold
+    initial: -77
+    min: -100
+    max: -40
+    step: 1
+    unit_of_measurement: dBm
+  rssi_not_present:
+    name: RSSI not-present threshold
+    initial: -90
+    min: -100
+    max: -40
+    step: 1
+    unit_of_measurement: dBm
 ```    
 
+These values are fetched by the ESPHome device from Home Assistant at runtime, using this yaml in ESPHome:
 
-The detection works as follows:
+```yaml
+  - platform: homeassistant
+    name: HA RSSI Present Value
+    entity_id: input_number.rssi_present
+    id: harssi_present
+    internal: true
+  - platform: homeassistant
+    name: HA RSSI Not Present Value
+    entity_id: input_number.rssi_not_present
+    id: harssi_not_present
+    internal: true
+```
+
+
+Within ESPHome, the detection works as follows:
 
 ```yaml
 esp32_ble_tracker:
@@ -116,7 +137,7 @@ esp32_ble_tracker:
 
 This uses ESPHome's [`esp32_ble_tracker`](https://esphome.io/components/esp32_ble_tracker.html) sensor. I've increased the `interval` and `window` to give as much time to detect the watch broadcast, but also enough time for the ESP32 to switch to WiFi to send results to MQTT and HA. We only listen for broadcasts, so `active: false`.
 
-On all broadcasts, a lambda is run which looks for the manufacturer UUID `004c` (note: big-endian), and manufacturer data that starts with `10 05 0X 98`. Byte 2 appears to always be in the range `01` through `0F` for Series 2 and 5, and `21` through `2F` for Series 6. I am specifically looking for when the watch is **unlocked** (i.e. on my wrist) so that tracking stops when I take my watch off and it auto-locks. In unlocked state, byte 3 is `98`. Locked state changes byte 3 to `18`. (All values hex.)
+On all broadcasts, a lambda is run which looks for the manufacturer UUID `004c` (note: big-endian), and manufacturer data that starts with `10 05 0X 98`. Byte 2 appears to always be in the range `01` through `0F` for Series 2 and 5, and `21` through `2F` for Series 6 and 7. I am specifically looking for when the watch is **unlocked** (i.e. on my wrist) so that tracking stops when I take my watch off and it auto-locks. In unlocked state, byte 3 is `98`. Locked state changes byte 3 to `18`. (All values hex.)
 
 For the case where multiple Apple Watches are detected, the strongest RSSI is published. As long as one watch is in the room, then the room is occupied.
 
@@ -280,11 +301,12 @@ I find that a hybrid approach is best:
 
 ## Tested and works with
 - ESPHome 2021.8
-- Generic MINI32 board (ESP32 with integrated 5V to 3V and USB to serial converter)
+- Generic MINI32 (ESP32-WROOM-32 with integrated 5V to 3V and USB to serial converter)
 - Apple Watch Series 3 (`Watch3,3`)
 - Apple Watch Series 5 (`Watch5,2`)
 - Apple Watch Series 6
-- My house is made from brick with a concrete slab between the bedroom and lounge, so signal attenuates rapidly
+- Apple Watch Series 7 (`Watch6,6`)
+- My house is made from brick and concrete, so signal attenuates rapidly
 
 
 ## Prior work on fingerprinting Apple device
@@ -301,7 +323,7 @@ I find that a hybrid approach is best:
 
 
 ## Contributing
-This has been tested on Series 3, 5, 6 Apple Watches. If this doesn't work on your Apple watch please open an Issue.
+This has been tested on Series 3, 5, 6, 7 Apple Watches. If this doesn't work on your Apple watch please open an Issue.
 
 I'd prefer that this was a custom ESPHome sensor, similar to [Xiaomi Mijia BLE Sensors](https://esphome.io/components/sensor/xiaomi_ble.html), instead of 100 lines of yaml. If you can help with the C, please let me know.
 
